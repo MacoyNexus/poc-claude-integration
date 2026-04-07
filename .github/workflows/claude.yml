@@ -43,7 +43,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_tools: "Bash,computer,text_editor,mcp__github__*"
           prompt: |
-            #Please review this pull request...
+            # Please review this pull request...
 
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
