@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+const MAX_DATA_SIZE = 1_000_000; // 1 MB
 
 export async function GET(
   _req: Request,
@@ -20,11 +23,21 @@ export async function GET(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
+  let messages: unknown;
+  let data: unknown;
+  try {
+    messages = JSON.parse(project.messages);
+    data = JSON.parse(project.data);
+  } catch {
+    console.error("Corrupt messages or data field for project", id);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+
   return NextResponse.json({
     id: project.id,
     name: project.name,
-    messages: JSON.parse(project.messages),
-    data: JSON.parse(project.data),
+    messages,
+    data,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   });
@@ -40,8 +53,15 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const body = await req.json();
-  const { name, messages, data } = body;
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { name, messages, data } = body as Record<string, unknown>;
 
   const updateData: Record<string, string> = {};
   if (name !== undefined) {
@@ -51,7 +71,13 @@ export async function PATCH(
     updateData.name = name.trim();
   }
   if (messages !== undefined) updateData.messages = JSON.stringify(messages);
-  if (data !== undefined) updateData.data = JSON.stringify(data);
+  if (data !== undefined) {
+    const serializedData = JSON.stringify(data);
+    if (serializedData.length > MAX_DATA_SIZE) {
+      return NextResponse.json({ error: "data payload too large" }, { status: 413 });
+    }
+    updateData.data = serializedData;
+  }
 
   try {
     const project = await prisma.project.update({
@@ -65,8 +91,12 @@ export async function PATCH(
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     });
-  } catch {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -86,7 +116,11 @@ export async function DELETE(
       where: { id, userId: session.userId },
     });
     return new NextResponse(null, { status: 204 });
-  } catch {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
