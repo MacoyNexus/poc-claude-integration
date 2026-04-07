@@ -17,6 +17,7 @@ jobs:
     #   github.event.pull_request.user.login == 'external-contributor' ||
     #   github.event.pull_request.user.login == 'new-developer' ||
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    if: github.triggering_actor != 'claude[bot]'
 
     runs-on: ubuntu-latest
     permissions:
@@ -36,7 +37,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowedTools "Bash(gh pr:*),Bash(gh api:*)"'
+          claude_args: '--allowedTools "Bash,Read,Glob,Grep"'
           prompt: |
             Please review this pull request for code quality issues including:
             - Debug console.log statements left in code
