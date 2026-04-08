@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+
 export async function GET() {
   const session = await getSession();
 
@@ -30,7 +32,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
-  const body = await request.json();
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_PAYLOAD_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { name, messages = [], data = {} } = body;
 
   if (!name || typeof name !== "string" || name.trim() === "") {
@@ -46,5 +59,12 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json(project, { status: 201 });
+  return NextResponse.json({
+    id: project.id,
+    name: project.name,
+    messages: JSON.parse(project.messages),
+    data: JSON.parse(project.data),
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  }, { status: 201 });
 }
